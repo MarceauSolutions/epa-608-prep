@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1c1c">
+<title>EPA 608 AI Tutor — Marceau</title>
+<style>
+:root{--gold:#C9963C;--gold-dim:#9c7430;--bg:#1c1c1c;--card:#262626;--card2:#2f2f2f;--line:#3c3c3c;--text:#ececec;--muted:#9a9a9a;--user:#2a3340;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;height:100%}
+.app{display:flex;flex-direction:column;height:100vh;max-width:680px;margin:0 auto}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--gold),var(--gold-dim));display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c1c1c}
+h1{font-size:16px;margin:0;font-weight:700}
+.sub{font-size:11px;color:var(--muted)}
+.topright{margin-left:auto;display:flex;gap:6px}
+.iconbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
+#chat{flex:1 1 auto;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:90%;padding:11px 14px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--user);border:1px solid #3a4656}
+.msg.ai{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
+.msg.ai b,.msg.ai strong{color:var(--gold)}
+.msg.sys{align-self:center;background:none;color:var(--muted);font-size:13px;text-align:center;max-width:100%}
+.quick{display:flex;gap:8px;overflow-x:auto;padding:8px 14px;flex:0 0 auto;border-top:1px solid var(--line)}
+.chip{flex:0 0 auto;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:8px 13px;font-size:13px;cursor:pointer;white-space:nowrap}
+.inputbar{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);flex:0 0 auto}
+#box{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px 13px;font-size:16px;resize:none;max-height:120px;font-family:inherit}
+#send{background:linear-gradient(135deg,var(--gold),var(--gold-dim));color:#1c1c1c;border:none;border-radius:12px;padding:0 18px;font-weight:700;font-size:15px;cursor:pointer}
+#send:disabled{opacity:.4}
+.setup{padding:24px 18px}
+.setup h2{color:var(--gold);font-size:18px}
+.setup input,.setup select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:12px;font-size:15px;margin:8px 0}
+.setup .go{width:100%;background:linear-gradient(135deg,var(--gold),var(--gold-dim));color:#1c1c1c;border:none;border-radius:12px;padding:13px;font-weight:700;font-size:16px;cursor:pointer;margin-top:6px}
+.setup small{color:var(--muted);display:block;margin-top:10px;line-height:1.5}
+a{color:var(--gold)}
+.dots:after{content:'';animation:d 1.2s infinite}
+@keyframes d{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">M</div>
+    <div><h1>EPA 608 AI Tutor</h1><div class="sub">Grounded on the real exam pool</div></div>
+    <div class="topright">
+      <a class="iconbtn" href="./index.html" style="text-decoration:none">◂ Drills</a>
+      <button class="iconbtn" onclick="settings()">⚙</button>
+    </div>
+  </header>
+
+  <div id="setup" class="setup hidden">
+    <h2>One-time setup</h2>
+    <p>This tutor talks to Claude using <b>your own Anthropic API key</b>. The key is stored only on this device (your phone), never uploaded anywhere, never in the website.</p>
+    <input id="key" type="password" placeholder="Paste Anthropic API key (sk-ant-...)" autocomplete="off">
+    <select id="model">
+      <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — best balance (recommended)</option>
+      <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — cheapest, fast</option>
+    </select>
+    <button class="go" onclick="saveKey()">Start tutoring</button>
+    <small>Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a>. Tip: make a key with a low monthly limit just for this. A typical study session costs a few cents.</small>
+  </div>
+
+  <div id="chat"></div>
+  <div id="quick" class="quick hidden"></div>
+  <div id="inputbar" class="inputbar hidden">
+    <textarea id="box" rows="1" placeholder="Ask anything, or 'quiz me on Type III'..."></textarea>
+    <button id="send" onclick="send()">Send</button>
+  </div>
+</div>
+
+<script>
+const LS_KEY="epa608_tutor_key", LS_MODEL="epa608_tutor_model";
+const QUICKS=[
+  ["Quiz me — Type III","Quiz me with one Type III low-pressure question in the real EPA 608 exam style. Wait for my answer, then tell me if I'm right and explain why."],
+  ["Quiz me — Type II","Quiz me with one Type II high-pressure question in real exam style. Wait for my answer before explaining."],
+  ["Quiz me — Type I","Quiz me with one Type I small-appliance question in real exam style. Wait for my answer before explaining."],
+  ["Explain purge units","Explain how a low-pressure chiller purge unit works and every way the exam asks about it."],
+  ["Water-cooled benefits","What are the benefits of a water-cooled low-pressure system, the way the exam asks it?"],
+  ["Recovery vacuum levels","Teach me the recovery vacuum levels for all appliance types so I never mix them up."],
+  ["Why did I miss this?","I'll paste a question I got wrong. Help me understand why the right answer is right."]
+];
+
+const SYSTEM=`You are an expert EPA Section 608 exam tutor. Your student is William, a wastewater I&E technician launching an HVAC business. He has FAILED the Type I, II, and III sections TWICE. Root cause: his prep drilled regulation recall, but the real ESCO/Mainstream exam tests APPLIED system mechanics — how equipment works, where components connect, the next correct step in a procedure, refrigerant substitutions, situational judgment.
+
+YOUR JOB: teach the WHY behind every fact so he can answer questions he has never seen. Be a sharp, encouraging journeyman mentor. Terse and practical, not academic. Use plain language. When you quiz, ask ONE question at a time in the real-pool style (short stem, 4 short options A-D), WAIT for his answer, then tell him right/wrong and explain the reasoning AND why each distractor is wrong.
+
+HARD RULES:
+- Ground everything in the verified facts below. If a question falls outside them and you are not certain, SAY you are not 100% sure rather than inventing an answer. He was failed twice by fabricated practice material — never fabricate.
+- Modern refrigerants (A2L like R-454B/R-32, low-GWP like R-1233zd, AIM Act/phasedown): you may explain them as BACKGROUND, but state clearly they are NOT on the current official EPA test-topics list (updated Dec 2025). The exam still tests legacy refrigerants (R-11/12/22/123/134a/410A/500/502).
+- The exam's favorite trap: two answers that "re-plumb hardware" are usually BOTH wrong; the correct answer is the one that diagnoses/repairs the real fault (e.g., to reduce purge-unit refrigerant loss -> leak-test and repair the chiller, NOT pipe it somewhere).
+
+VERIFIED FACT SHEET (the real-pool content):
+
+TYPE I (small appliances, <=5 lb factory charge, hermetically sealed; MVAC is Section 609 not 608):
+- Recovery %: operating compressor -> recover 90% (or 4" Hg vacuum); dead compressor -> 80% (or 4" Hg). Post-Nov-15-1993 equipment must be EPA-lab certified.
+- Compressor runs: run a few min, shut off, recover from LOW side. Compressor dead: access BOTH high+low side, and HEAT or STRIKE the compressor to drive refrigerant from the oil. Plugged cap tube + running compressor: one valve on HIGH side.
+- Passive/system-dependent = uses appliance's own pressure into a NON-pressurized container, no pump. Active/self-contained = machine does the work. A vacuum pump alone is NOT a recovery device.
+- Access via the PROCESS TUBE/stub with a piercing valve; piercing valves only on COPPER or ALUMINUM (not steel); they leak over time so don't leave them on; leak-test a new access fitting before recovery; 0 psig after piercing = don't start (empty/leak).
+- No true "drop-in" substitute for R-12 or R-22 (answer is "None of the above"). R-134a is the common R-12 replacement in NEW fridges. Refrigerants must NEVER be mixed; R-500 needs its own cylinder.
+- Sales restricted to EPA-certified techs. Cert never expires. Frost-free fridge: use the defrost heater to vaporize trapped liquid. Cylinder pressures (75F, no non-condensables): R-12 ~75 psig, R-22 ~130, R-500 ~95, R-410A ~300 (90F). Phosgene + HCl/HF acids form when R-12/R-22 hit flame/hot metal. Refrigerant is heavier than air -> displaces oxygen (suffocation). Ship in DOT containers.
+
+TYPE II (high pressure: R-22, R-410A, R-134a, R-502; receivers, accumulators):
+- Diagnose by symptom: NON-CONDENSABLES (air) -> HIGH head/discharge pressure. Excessive superheat -> possible leak/undercharge. Oil foaming -> in the COMPRESSOR crankcase. Air = gauge hotter than line (MISMATCH); dirty condenser/overcharge = MATCH.
+- Recover LIQUID first (fastest), then vapor (condensed by the machine, never vented). After target vacuum, WAIT to see if pressure rises (refrigerant still in oil/liquid). Speed recovery by packing the cylinder in ICE. Evacuate an empty cylinder before transferring. Operating unit w/ receiver -> recover into the receiver.
+- Switching refrigerants in your machine: recover out the old one, change filter (+ lubricant), evacuate; tank/machine must be RATED for the new refrigerant (R-410A needs >=400 psig tanks, 800 psig working / 4000 burst gauges).
+- Leak check with PRESSURIZED DRY NITROGEN; NEVER oxygen/air (explosion). Look for OIL traces. Trace gas if unavoidable = HCFC-22. Vacuum pump to ~500 microns. Deep vacuum measured in microns.
+- Components: after evaporator = accumulator; after condenser (with TXV) = receiver; receiver is on the HIGH side (not low). Always replace the filter-drier when opened. Crankcase heater drives refrigerant out of the oil. Never energize a hermetic compressor under deep vacuum (winding damage). Don't run against a closed discharge valve.
+- New residential split = R-410A; older = R-22. Retrofit R-22->R-407C. Read the NAMEPLATE to ID refrigerant. Blends (400-series non-azeotropic) leave the cylinder as LIQUID; R-410A is near-azeotropic and can be topped off. System-dependent recovery prohibited over 15 lb charge.
+- Evacuation before major repair (post-1993 equipment): high-pressure <200 lb -> 0 psig (atmospheric); >=200 lb -> 10" Hg; (CFC-12 >200 lb -> 15" Hg). Leak repair: comfort cooling >50 lb must be fixed above ~10%/yr leak rate; commercial/industrial higher (older pool says 30%); ASHRAE 15 requires an equipment-room monitor for R-123.
+
+TYPE III (low pressure / centrifugal chillers: R-11, R-123; run in a VACUUM so air leaks IN):
+- Both R-11 and R-123 need PURGE UNITS because the system runs BELOW atmospheric. Air in the system -> HIGH head pressure. Keep an idle system slightly ABOVE atmospheric to keep air out.
+- PURGE UNIT: takes suction from the TOP of the condenser; returns refrigerant to the EVAPORATOR; vents non-condensable air. "High-efficiency purge" = discharges a LOW % of refrigerant with the air. Excessive purging OR moisture in the purge = SYSTEM IS LEAKING (moisture specifically = condenser/chiller barrel tubes leaking). To reduce purge refrigerant loss -> LEAK-TEST AND REPAIR THE CHILLER (NOT re-plumb the purge).
+- Recover LIQUID first (faster) then VAPOR. During vapor recovery: water pumps ON, recovery compressor ON, recovery condenser water ON (all on). Suspected tube leaks: DRAIN the water sides first. Recovery unit high-pressure cutout ~10 psig. ~100 lb of vapor remains in a 350-ton R-11 chiller at 0 psig after liquid is out.
+- CHARGE VAPOR FIRST then liquid: liquid into a deep vacuum flash-boils and FREEZES the water in the tubes (cracks them). Add refrigerant at the EVAPORATOR charging valve (lowest point). R-11: build to ~16.9" Hg vacuum with vapor first; charge vapor until pressure = ~36F saturation. Too-large a vacuum pump can freeze trapped water.
+- Rupture disc on the EVAPORATOR, vents OUTDOORS, bursts at 15 psig -> so MAX leak-test pressure = 10 psig (test below the burst). Leak-check a charged system by HEATING (hot water/blankets), or warm the refrigerant for non-major repairs. Prevent moisture freezing during evacuation with NITROGEN. Open-drive compressor leaks at the SHAFT SEAL. Probe the water-box DRAIN valve to find tube leaks.
+- Recovery vacuum (post-1993 equipment): low-pressure appliance -> 25 mm Hg ABSOLUTE (pre-1993 -> 25" Hg vacuum). R-123 is toxic -> ASHRAE 15 room sensor/alarm before TLV-TWA.
+- Substitution: R-11 -> R-123 (conversion, not a drop-in).
+
+Keep answers focused. End quizzes by asking if he wants another. Celebrate progress.`;
+
+let MESSAGES=[];
+function getKey(){return localStorage.getItem(LS_KEY);}
+function getModel(){return localStorage.getItem(LS_MODEL)||"claude-sonnet-4-6";}
+
+function boot(){
+  if(!getKey()){ document.getElementById('setup').classList.remove('hidden'); return; }
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('quick').classList.remove('hidden');
+  document.getElementById('inputbar').classList.remove('hidden');
+  const q=document.getElementById('quick'); q.innerHTML='';
+  QUICKS.forEach(([label,prompt])=>{const b=document.createElement('button');b.className='chip';b.textContent=label;b.onclick=()=>{document.getElementById('box').value=prompt;send();};q.appendChild(b);});
+  if(!MESSAGES.length){ addMsg('ai',"I'm your EPA 608 tutor, grounded on the real exam pool. Tap a chip below to start, or ask me anything. I'll teach the *why* — that's what the exam tests. Type III is your weakest, so I'd start there."); }
+}
+function saveKey(){
+  const k=document.getElementById('key').value.trim();
+  if(!k.startsWith('sk-ant-')){alert('That does not look like an Anthropic key (should start with sk-ant-).');return;}
+  localStorage.setItem(LS_KEY,k); localStorage.setItem(LS_MODEL,document.getElementById('model').value); boot();
+}
+function settings(){
+  if(confirm('Re-enter your API key / change model? (Your chat stays.)')){ document.getElementById('setup').classList.remove('hidden'); document.getElementById('key').value=getKey()||''; document.getElementById('model').value=getModel(); }
+}
+function addMsg(role,text){
+  const d=document.createElement('div'); d.className='msg '+role;
+  d.innerHTML = role==='ai' ? mdlite(text) : escapeHtml(text);
+  document.getElementById('chat').appendChild(d);
+  const c=document.getElementById('chat'); c.scrollTop=c.scrollHeight;
+  return d;
+}
+function escapeHtml(s){return (s+'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function mdlite(s){return escapeHtml(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+
+async function send(){
+  const box=document.getElementById('box'); const text=box.value.trim(); if(!text) return;
+  box.value=''; box.style.height='auto';
+  addMsg('user',text); MESSAGES.push({role:'user',content:text});
+  const btn=document.getElementById('send'); btn.disabled=true;
+  const thinking=addMsg('ai',''); thinking.innerHTML='<span class="dots"></span>';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:getModel(),max_tokens:1200,system:SYSTEM,messages:MESSAGES})
+    });
+    const data=await res.json();
+    if(!res.ok){ thinking.classList.remove('ai'); thinking.classList.add('sys'); thinking.textContent='Error: '+(data.error&&data.error.message?data.error.message:('HTTP '+res.status))+(res.status===401?' — check your API key in ⚙':''); MESSAGES.pop(); }
+    else{ const txt=data.content.map(c=>c.text||'').join(''); thinking.innerHTML=mdlite(txt); MESSAGES.push({role:'assistant',content:txt}); }
+  }catch(e){ thinking.classList.remove('ai'); thinking.classList.add('sys'); thinking.textContent='Network error: '+e.message; MESSAGES.pop(); }
+  btn.disabled=false; document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
+}
+const box=document.getElementById('box');
+box.addEventListener('input',()=>{box.style.height='auto';box.style.height=Math.min(box.scrollHeight,120)+'px';});
+box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+boot();
+</script>
+</body>
+</html>
