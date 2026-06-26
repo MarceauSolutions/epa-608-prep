@@ -66,6 +66,10 @@ h2{font-size:15px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;
   border-radius:12px;padding:13px 22px;font-size:16px;font-weight:700;cursor:pointer}
 .nextbtn:disabled{opacity:.4}
 .link{color:var(--gold);background:none;border:none;font-size:14px;cursor:pointer;padding:8px 0;text-decoration:underline}
+.deeper{display:inline-block;margin-top:6px}
+.ai-elab{margin-top:10px;background:#20262e;border:1px solid #34404e;border-left:3px solid #5b7a9c;border-radius:8px;padding:11px 13px;font-size:14px;color:#dfe6ee;display:none}
+.ai-elab.show{display:block}
+.ai-elab .tag{display:block;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#8fa8c2;margin-bottom:6px;font-weight:700}
 .big{font-size:46px;font-weight:800;text-align:center;margin:10px 0 4px}
 .big.pass{color:var(--gold)} .big.fail{color:var(--wrong)}
 .center{text-align:center}
@@ -93,6 +97,8 @@ const TOPIC_META = {"ozone-and-regulations":["Ozone, Clean Air Act & scope",2],"
 const TYPE_NAMES = {"C":"Core \u2014 Universal (required)","I":"Type I \u2014 Small Appliances","II":"Type II \u2014 High Pressure","III":"Type III \u2014 Low Pressure"};
 const PASS = 0.72; // 18/25 proctored
 const KEY = "epa608_state_v1";
+const TUTOR_KEY = "epa608_tutor_key", TUTOR_MODEL = "epa608_tutor_model"; // shared with tutor.html (same origin)
+const SYSTEM_EXPLAIN = "You are an EPA 608 exam tutor helping a student who failed the exam twice because his prep tested rote recall instead of applied mechanics. You will be given ONE real exam question, the student's WRONG choice, the correct answer, and a VERIFIED reason. In 3-4 short sentences, explain why the correct answer is right, why his choice is wrong, and the underlying mechanic so he can answer variants he has not seen. Ground STRICTLY in the verified reason provided — do NOT introduce numbers, dates, or facts beyond it; if the verified reason is thin, say so rather than inventing detail. Plain, practical, encouraging — like a journeyman mentor.";
 
 let S = load();
 function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || blank(); }catch(e){ return blank(); } }
@@ -278,9 +284,32 @@ function choose(i){
   document.getElementById('next').disabled=false;
   // record happens via answer(): call it for stats but without re-showing
   recordOnce(q, choice===q.answer);
+  CUR.choice=choice;
+  // Inline AI explain — only on a MISS and only if a tutor key exists; drill is unchanged otherwise.
+  if(choice!==q.answer && localStorage.getItem(TUTOR_KEY)){
+    w.insertAdjacentHTML('beforeend','<br><button class="link deeper" id="deeperBtn">Explain / go deeper ▸</button><div class="ai-elab" id="aiElab"></div>');
+    document.getElementById('deeperBtn').onclick=explainMiss;
+  }
 }
 let _lastRec=null;
 function recordOnce(q,correct){ if(_lastRec===CUR){return;} _lastRec=CUR; SESSION.count++; if(correct)SESSION.right++; record(q,correct); }
+function elabMd(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+async function explainMiss(){
+  const q=CUR.q, choice=CUR.choice||''; const out=document.getElementById('aiElab'), btn=document.getElementById('deeperBtn');
+  if(!out) return;
+  const TAG='<span class="tag">AI elaboration — not the verified source</span>';
+  out.classList.add('show'); out.innerHTML=TAG+'Thinking…'; if(btn) btn.disabled=true;
+  const model=localStorage.getItem(TUTOR_MODEL)||'claude-haiku-4-5-20251001';
+  const msg='EPA 608 Type '+q.type+' question:\n"'+q.q+'"\nOptions: '+q.options.join(' | ')+'\nI answered (WRONG): "'+choice+'"\nCorrect answer: "'+q.answer+'"\nVerified reason: "'+(q.why||'')+'"\n\nExplain why the correct answer is right, why my choice is wrong, and the underlying mechanic. Ground strictly in the verified reason; add no facts beyond it.';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':localStorage.getItem(TUTOR_KEY),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:model,max_tokens:400,system:SYSTEM_EXPLAIN,messages:[{role:'user',content:msg}]})});
+    const data=await res.json();
+    if(res.ok){ out.innerHTML=TAG+elabMd(data.content.map(c=>c.text||'').join('')); }
+    else { out.innerHTML='<span class="tag">Tutor unavailable</span>The verified answer above still stands.'+(res.status===401?' (check your API key on the Tutor page)':''); if(btn) btn.disabled=false; }
+  }catch(e){ out.innerHTML='<span class="tag">Offline</span>The verified answer above still stands.'; if(btn) btn.disabled=false; }
+}
 
 function renderExamResult(){
   const list=SESSION.examAns; const right=list.filter(a=>a.correct).length;
